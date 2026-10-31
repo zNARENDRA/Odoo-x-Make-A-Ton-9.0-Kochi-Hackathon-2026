@@ -18,6 +18,6 @@
             @if(in_array($item->status,['active','paused','closed']) && $item->plan->can_renew && ($item->expires_on || $item->status === 'closed'))@can('transition',[$item,'renew'])<button wire:click="changeSubscriptionStatus({{ $item->id }}, 'renew')" wire:loading.attr="disabled" wire:confirm="Renew this subscription for another billing period?" class="link">Renew</button>@endcan @endif
         </div></td>
     </tr>
-    @empty<tr><td colspan="6" class="!py-16 text-center"><p class="font-medium text-slate-700">No subscriptions found</p><p class="mt-2 text-sm text-slate-400">{{ $team ? 'Create a customer account and a plan to get started.' : 'Your subscriptions will appear here when your team sets them up.' }}</p></td></tr>@endforelse
+    @empty<tr><td colspan="6" class="!py-16 text-center"><p class="font-medium text-slate-700">No subscriptions found</p><p class="mt-2 text-sm text-slate-400">{{ $team ? 'Create a customer account and a plan to get started.' : 'Choose a plan from Browse Plans to start your first subscription.' }}</p></td></tr>@endforelse
     </tbody></table></div><div class="border-t border-slate-100 px-5 py-4">{{ $subscriptions->links() }}</div>
 </div>

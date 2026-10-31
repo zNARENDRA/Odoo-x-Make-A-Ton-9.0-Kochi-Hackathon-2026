@@ -11,6 +11,10 @@
         @endif
     </div>
 
+    @if(!$team && $section === 'subscriptions')
+        <a href="{{ route('plans') }}" wire:navigate class="btn mb-6">Browse Plans & Subscribe</a>
+    @endif
+
     @if(session('success'))<div role="status" class="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800">{{ session('success') }}</div>@endif
     @if($errors->any())<div role="alert" class="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-800"><p class="font-semibold">Please review the following</p><ul class="mt-2 list-inside list-disc">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
 

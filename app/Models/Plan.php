@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Database\Factories\PlanFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -22,5 +23,12 @@ class Plan extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function scopeAvailable(Builder $query): void
+    {
+        $query->whereNotNull('product_id')
+            ->where(fn ($dates) => $dates->whereNull('available_from')->orWhereDate('available_from', '<=', today()))
+            ->where(fn ($dates) => $dates->whereNull('available_until')->orWhereDate('available_until', '>=', today()));
     }
 }
