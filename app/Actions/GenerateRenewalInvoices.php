@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 
 class GenerateRenewalInvoices
 {
-    public function __construct(private ApplyInvoiceDiscount $discounts) {}
+    public function __construct(private CalculateInvoiceTotals $totals) {}
 
     public function handle(Subscription $subscription, ?CarbonImmutable $through = null): int
     {
@@ -41,18 +41,8 @@ class GenerateRenewalInvoices
                             'quantity' => $subscription->quantity, 'unit_price_cents' => $subscription->unit_price_cents,
                             'tax_basis_points' => $subscription->tax_basis_points, 'position' => 0]];
                     }
-                    foreach ($lines as &$line) {
-                        $line['subtotal_cents'] = (int) $line['unit_price_cents'] * (int) $line['quantity'];
-                    }
-                    unset($line);
-                    $result = $this->discounts->handle($subscription, $subscription->next_billing_on, $lines);
+                    $result = $this->totals->handle($subscription, $subscription->next_billing_on, $lines);
                     $lines = $result['lines'];
-                    foreach ($lines as &$line) {
-                        $net = $line['subtotal_cents'] - $line['discount_cents'];
-                        $line['tax_cents'] = intdiv($net * (int) $line['tax_basis_points'] + 5000, 10000);
-                        $line['total_cents'] = $net + $line['tax_cents'];
-                    }
-                    unset($line);
                     $invoice = Invoice::create([
                         'subscription_id' => $subscription->id, 'period_start' => $subscription->next_billing_on,
                         'due_on' => $subscription->next_billing_on->addDays($subscription->payment_terms_days),

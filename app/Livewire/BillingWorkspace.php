@@ -3,7 +3,7 @@
 namespace App\Livewire;
 
 use App\Actions\CreateSubscriptionDraft;
-use App\Actions\GenerateRenewalInvoices;
+use App\Actions\GenerateDueInvoices;
 use App\Actions\RecordPayment;
 use App\Actions\TransitionSubscription;
 use App\Mail\InvoiceReady;
@@ -259,18 +259,15 @@ class BillingWorkspace extends Component
         session()->flash('success', 'Subscription updated.');
     }
 
-    public function generateInvoices(GenerateRenewalInvoices $generator): void
+    public function generateInvoices(GenerateDueInvoices $generator): void
     {
         Gate::authorize('manage-billing');
         $this->resetValidation();
-        $count = 0;
-        Subscription::dueForBilling()
-            ->chunkById(100, function ($subscriptions) use ($generator, &$count): void {
-                foreach ($subscriptions as $subscription) {
-                    $count += $generator->handle($subscription);
-                }
-            });
-        session()->flash('success', $count.' draft invoice(s) generated. Review and confirm them before sending.');
+        $result = $generator->handle();
+        if ($result['failed'] > 0) {
+            $this->addError('billing', $result['failed'].' subscription(s) failed to bill. Review Billing operations.');
+        }
+        session()->flash('success', $result['created'].' draft invoice(s) generated. Review and confirm them before sending.');
     }
 
     public function confirmInvoice(int $id): void

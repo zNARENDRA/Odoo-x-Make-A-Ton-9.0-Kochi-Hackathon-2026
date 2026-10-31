@@ -11,14 +11,33 @@
             <div><label for="subscribe-quantity" class="label">Quantity</label><input id="subscribe-quantity" type="number" class="input" min="{{ $selected->minimum_quantity }}" max="10000" wire:model.live.debounce.300ms="quantity" required></div>
             <div><label for="subscribe-variant" class="label">Product variant</label><select id="subscribe-variant" class="input" wire:model.live="variantId"><option value="">Standard</option>@foreach($selected->product->variants as $variant)@if($variant->is_active)<option value="{{ $variant->id }}">{{ $variant->name }} ({{ $variant->price_modifier_cents >= 0 ? '+' : '' }}{{ number_format($variant->price_modifier_cents / 100, 2) }} per unit)</option>@endif @endforeach</select></div>
         </div>
-        <dl class="mt-5 flex max-w-md flex-col gap-2 text-sm">
-            <div class="flex justify-between"><dt>Recurring subtotal</dt><dd><x-money :cents="$subtotal" /></dd></div>
-            <div class="flex justify-between"><dt>Tax</dt><dd><x-money :cents="$tax" /></dd></div>
-            <div class="flex justify-between border-t border-slate-200 pt-3 font-semibold"><dt>Total before discounts</dt><dd><x-money :cents="$subtotal + $tax" /></dd></div>
-        </dl>
-        <p class="mt-3 text-xs text-slate-500">Eligible automatic discounts are applied on your invoice. Your subscription starts today and repeats {{ $selected->interval }}. The first invoice is due in 14 days. Arrange payment with the seller.</p>
+        @if($quote)
+        <div class="mt-6 grid gap-6 lg:grid-cols-2">
+            <section class="rounded-xl border border-slate-200 p-5"><h3 class="font-semibold">Your first invoice</h3><dl class="mt-4 flex flex-col gap-3 text-sm">
+                <div class="flex justify-between gap-3"><dt>Unit price including variant</dt><dd><x-money :cents="$quote['first']['lines'][0]['unit_price_cents']" /></dd></div>
+                <div class="flex justify-between gap-3"><dt>Subtotal · {{ $quantity }} unit(s)</dt><dd><x-money :cents="$quote['first']['subtotal_cents']" /></dd></div>
+                <div class="flex justify-between gap-3"><dt>Discount{{ $quote['first']['discount'] ? ' · '.$quote['first']['discount']->name : '' }}</dt><dd>−<x-money :cents="$quote['first']['amount']" /></dd></div>
+                <div class="flex justify-between gap-3"><dt>Tax · {{ number_format($selected->product->tax_basis_points / 100, 2) }}%</dt><dd><x-money :cents="$quote['first']['tax_cents']" /></dd></div>
+                <div class="flex justify-between gap-3 border-t border-slate-200 pt-3 font-semibold"><dt>First invoice total</dt><dd><x-money :cents="$quote['first']['total_cents']" /></dd></div>
+                <div class="flex justify-between gap-3"><dt>Payment due</dt><dd>{{ $quote['due_on']->format('d M Y') }}</dd></div>
+            </dl></section>
+            <section class="rounded-xl border border-slate-200 p-5"><h3 class="font-semibold">Your next billing period</h3><dl class="mt-4 flex flex-col gap-3 text-sm">
+                <div class="flex justify-between gap-3"><dt>Next billing date</dt><dd>{{ $quote['next_billing_on']->format('d M Y') }}</dd></div>
+                <div class="flex justify-between gap-3"><dt>Estimated subtotal</dt><dd><x-money :cents="$quote['next']['subtotal_cents']" /></dd></div>
+                <div class="flex justify-between gap-3"><dt>Estimated discount</dt><dd>−<x-money :cents="$quote['next']['amount']" /></dd></div>
+                <div class="flex justify-between gap-3"><dt>Estimated tax</dt><dd><x-money :cents="$quote['next']['tax_cents']" /></dd></div>
+                <div class="flex justify-between gap-3 border-t border-slate-200 pt-3 font-semibold"><dt>Expected next payment · estimate</dt><dd><x-money :cents="$quote['next']['total_cents']" /></dd></div>
+                <div class="flex justify-between gap-3"><dt>Expected payment due</dt><dd>{{ $quote['next_billing_on']->addDays(14)->format('d M Y') }}</dd></div>
+            </dl><p class="mt-4 text-xs leading-5 text-slate-500">Future amounts are estimates. Discount dates and remaining uses are checked again when billing runs. This estimate allows for one discount use on your first invoice.</p></section>
+        </div>
+        @else<p role="alert" class="mt-5 text-sm text-rose-700">Choose a valid quantity and available variant to review your price.</p>@endif
+        <div class="mt-5 rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">
+            <p>Your subscription starts today and repeats {{ $selected->interval }}. Arrange payment with the seller.</p>
+            <p>{{ $selected->can_close ? 'You can close this subscription in your portal. Closing stops future recurring billing. Existing invoices remain payable, and closing does not issue a refund.' : 'Early closure is unavailable for this plan. Contact the seller to discuss cancellation.' }}</p>
+            <p>{{ $selected->can_pause ? 'Pausing is allowed. Billing stops while paused and resumes without billing the paused interval.' : 'Pausing is unavailable for this plan.' }} Contact the seller to request a plan change.</p>
+        </div>
         <label class="mt-5 flex items-start gap-2 text-sm"><input type="checkbox" class="mt-1 accent-blue-600" wire:model="accepted" required><span>I agree to start this recurring subscription at the price and billing frequency shown.</span></label>
-        <div class="mt-5 flex flex-wrap gap-3"><button class="btn" wire:loading.attr="disabled">Confirm subscription</button><button type="button" class="btn-secondary" wire:click="$set('planId',null)">Cancel</button></div>
+        <div class="mt-5 flex flex-wrap gap-3"><button class="btn" wire:loading.attr="disabled" @disabled(!$quote)>Confirm subscription</button><button type="button" class="btn-secondary" wire:click="$set('planId',null)">Cancel</button></div>
     </form>
     @endif
     <div class="mt-6"><label for="plan-search" class="sr-only">Search plans</label><input id="plan-search" class="input sm:max-w-sm" placeholder="Search plans…" wire:model.live.debounce.300ms="search"></div>

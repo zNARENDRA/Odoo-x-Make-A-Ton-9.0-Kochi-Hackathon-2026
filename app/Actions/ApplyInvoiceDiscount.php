@@ -13,18 +13,18 @@ class ApplyInvoiceDiscount
      * @param  array<int, array<string, mixed>>  $lines
      * @return array{lines: array<int, array<string, mixed>>, discount: ?Discount, amount: int}
      */
-    public function handle(Subscription $subscription, CarbonImmutable $period, array $lines): array
+    public function handle(Subscription $subscription, CarbonImmutable $period, array $lines, bool $lockRules = true, array $additionalUses = []): array
     {
         $rules = Discount::where('is_active', true)
             ->where(fn (Builder $query) => $query->whereNull('subscription_id')->orWhere('subscription_id', $subscription->id))
             ->where(fn (Builder $query) => $query->whereNull('starts_on')->orWhereDate('starts_on', '<=', $period))
             ->where(fn (Builder $query) => $query->whereNull('ends_on')->orWhereDate('ends_on', '>=', $period))
-            ->orderBy('id')->lockForUpdate()->get();
+            ->orderBy('id')->when($lockRules, fn (Builder $query) => $query->lockForUpdate())->get();
         $best = null;
         $amount = 0;
         $eligible = [];
         foreach ($rules as $rule) {
-            if ($rule->max_uses !== null && $rule->uses_count >= $rule->max_uses) {
+            if ($rule->max_uses !== null && $rule->uses_count + ($additionalUses[$rule->id] ?? 0) >= $rule->max_uses) {
                 continue;
             }
             $indexes = array_keys(array_filter($lines, fn (array $line): bool => ! $rule->product_id || $line['product_id'] === $rule->product_id));

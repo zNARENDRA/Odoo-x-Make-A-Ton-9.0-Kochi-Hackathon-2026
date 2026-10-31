@@ -2,8 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Actions\GenerateRenewalInvoices;
-use App\Models\Subscription;
+use App\Actions\GenerateDueInvoices;
 use Illuminate\Console\Command;
 
 class GenerateInvoices extends Command
@@ -12,17 +11,14 @@ class GenerateInvoices extends Command
 
     protected $description = 'Generate missing draft invoices for all due active subscriptions';
 
-    public function handle(GenerateRenewalInvoices $generator): int
+    public function handle(GenerateDueInvoices $generator): int
     {
-        $count = 0;
-        Subscription::dueForBilling()
-            ->chunkById(100, function ($subscriptions) use ($generator, &$count): void {
-                foreach ($subscriptions as $subscription) {
-                    $count += $generator->handle($subscription);
-                }
-            });
-        $this->info("Generated {$count} draft invoice(s).");
+        $result = $generator->handle();
+        $this->info("Generated {$result['created']} draft invoice(s).");
+        if ($result['failed'] > 0) {
+            $this->error($result['failed'].' subscription(s) failed. Review Billing operations.');
+        }
 
-        return self::SUCCESS;
+        return $result['failed'] > 0 ? self::FAILURE : self::SUCCESS;
     }
 }

@@ -400,8 +400,8 @@ class BillingExtensionsTest extends TestCase
             foreach (['0001_01_01_000000_create_users_table.php', '2026_01_01_000001_create_billing_tables.php', '2026_10_31_043853_extend_billing_tables.php'] as $file) {
                 (require database_path('migrations/'.$file))->up();
             }
-            $subscription = Subscription::factory()->create();
-            $invoice = Invoice::factory()->for($subscription)->create();
+            $subscription = Subscription::factory()->createQuietly();
+            $invoice = Invoice::factory()->for($subscription)->createQuietly();
             (require database_path('migrations/2026_10_31_111624_add_billing_extensions.php'))->up();
             $this->assertDatabaseHas('subscription_lines', ['subscription_id' => $subscription->id, 'quantity' => 2, 'unit_price_cents' => 250000]);
             $this->assertDatabaseHas('invoice_lines', ['invoice_id' => $invoice->id, 'total_cents' => 590000, 'tax_cents' => 90000]);
