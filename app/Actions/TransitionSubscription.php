@@ -5,21 +5,43 @@ namespace App\Actions;
 use App\Models\Subscription;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 
 class TransitionSubscription
 {
+    public function __construct(private GenerateRenewalInvoices $generateInvoices) {}
+
     public function handle(User $actor, Subscription $subscription, string $action): void
     {
-        Gate::forUser($actor)->authorize('manage-billing');
-        DB::transaction(function () use ($subscription, $action): void {
-            $subscription = Subscription::with('plan')->lockForUpdate()->findOrFail($subscription->id);
+        DB::transaction(function () use ($actor, $subscription, $action): void {
+            $subscription = Subscription::with('plan')->when(! $actor->isTeamMember(), fn (Builder $query) => $query->where('user_id', $actor->id))
+                ->lockForUpdate()->findOrFail($subscription->id);
+            Gate::forUser($actor)->authorize('transition', [$subscription, $action]);
+            $canSettle = ($action === 'pause' && $subscription->plan->can_pause)
+                || ($action === 'close' && $subscription->plan->can_close)
+                || ($action === 'renew' && $subscription->plan->can_renew && $subscription->expires_on?->lte(CarbonImmutable::today()));
+            if (! $actor->isTeamMember() && $subscription->status === 'active' && $canSettle) {
+                do {
+                    $previousDate = $subscription->next_billing_on;
+                    $this->generateInvoices->handle($subscription);
+                    $subscription->refresh();
+                } while ($subscription->status === 'active' && $subscription->next_billing_on->lte(CarbonImmutable::today())
+                    && $subscription->next_billing_on->gt($previousDate)
+                    && (! $subscription->expires_on || $subscription->next_billing_on->lt($subscription->expires_on)));
+                if ($subscription->status === 'closed' && $action !== 'renew') {
+                    return;
+                }
+            }
             $next = ['draft' => 'quotation', 'quotation' => 'confirmed', 'confirmed' => 'active'];
             $status = $subscription->status;
             $changes = [];
             if ($action === 'advance' && isset($next[$status])) {
+                if ($status === 'quotation' && $subscription->quotation_expires_on?->lt(CarbonImmutable::today())) {
+                    throw ValidationException::withMessages(['subscription' => 'This quotation has expired. Create a fresh draft from the template.']);
+                }
                 if ($next[$status] === 'active' && $subscription->expires_on?->lte(CarbonImmutable::today())) {
                     throw ValidationException::withMessages(['subscription' => 'Extend the expiry date before activating this subscription.']);
                 }
@@ -29,7 +51,7 @@ class TransitionSubscription
                     throw ValidationException::withMessages(['subscription' => 'Generate all due invoices before pausing this subscription.']);
                 }
                 $changes['status'] = 'paused';
-            } elseif ($action === 'resume' && $status === 'paused') {
+            } elseif ($action === 'resume' && $status === 'paused' && ($actor->isTeamMember() || $subscription->plan->can_pause)) {
                 if ($subscription->expires_on?->lte(CarbonImmutable::today())) {
                     throw ValidationException::withMessages(['subscription' => 'Renew the subscription before resuming.']);
                 }

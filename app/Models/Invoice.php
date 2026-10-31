@@ -13,7 +13,7 @@ class Invoice extends Model
     /** @use HasFactory<InvoiceFactory> */
     use HasFactory;
 
-    protected $fillable = ['subscription_id', 'period_start', 'due_on', 'total_cents', 'subtotal_cents', 'tax_cents', 'status', 'snapshot', 'currency'];
+    protected $fillable = ['subscription_id', 'period_start', 'due_on', 'total_cents', 'subtotal_cents', 'tax_cents', 'discount_cents', 'status', 'snapshot', 'currency'];
 
     protected function casts(): array
     {
@@ -33,6 +33,11 @@ class Invoice extends Model
     public function number(): string
     {
         return 'INV-'.str_pad((string) $this->id, 6, '0', STR_PAD_LEFT);
+    }
+
+    public function lines(): HasMany
+    {
+        return $this->hasMany(InvoiceLine::class)->orderBy('position');
     }
 
     public function balanceCents(): int

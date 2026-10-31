@@ -38,15 +38,21 @@ Set `APP_URL` to the address customers use, `APP_TIMEZONE` for business dates (d
 ## Billing flow
 
 1. An admin adds a product, its tax percentage, and a daily, weekly, monthly or yearly plan.
-2. A team member creates a customer subscription. Unit price, tax rate and billing interval are captured from the plan.
+2. A team member creates a customer subscription, optionally using a quotation template. Add product lines and variants as needed. Unit prices, variant names and per-product tax rates are captured in the draft; all lines repeat on the selected plan's billing interval.
 3. Advance Draft → Quotation → Confirmed → Active.
 4. Click **Generate due invoices** or run `php artisan billing:generate-invoices`. The scheduler runs this check every minute.
 5. Review the generated draft invoice and confirm it. Send it to the queue or print it from its detail page.
 6. Record payments already received. Partial payments reduce the balance; a final payment marks the invoice paid.
 
-Invoice generation locks each subscription and records each billing period once, protected by a unique database constraint. It catches up missed periods in order, up to 100 per subscription per invocation; further overdue periods are processed on the next run. Monthly billing preserves the original day across short months. Expiry dates are exclusive: no period starting on or after expiry is generated. Paused subscriptions are not billed; resuming does not back-bill the paused interval. Generate all due periods before pausing or closing a subscription.
+Invoice generation locks each subscription and records each billing period once, protected by a unique database constraint. It catches up missed periods in order, up to 100 per subscription per invocation; further overdue periods are processed on the next run. Monthly billing preserves the original day across short months. Expiry dates are exclusive: no period starting on or after expiry is generated. Paused subscriptions are not billed; resuming does not back-bill the paused interval. Team members generate due periods before pausing or closing. Customer self-service automatically generates due periods before these actions.
 
-Plan flags control pause, early closure, renewal and automatic closure. Renewal extends expiry by one interval and can reopen a closed subscription. Cancelling an invoice preserves its period, so retrying billing does not recreate it. Invoices with payments cannot be cancelled. Tax uses a single captured percentage with half-up rounding per invoice.
+Plan flags control pause, early closure, renewal and automatic closure. Customers can pause, resume, renew or close only their own subscriptions when the plan permits it. Renewal extends expiry by one interval and can reopen a closed subscription. Cancelling an invoice preserves its period, so retrying billing does not recreate it. Invoices with payments cannot be cancelled. Tax is calculated per product line after discounts, rounded half-up to the minor unit.
+
+Admins manage variants, discounts and quotation templates under **Products & plans**. Variant modifiers apply per unit and can increase or reduce the base price, but the resulting unit price cannot be negative. Templates pre-fill a plan, variants, quantities, additional lines and payment terms; quotation validity is recorded when the draft is saved. An expired quotation cannot be confirmed.
+
+Discounts can be fixed amounts or percentages, scoped to a product, a subscription, both, or all records. The best eligible rule applies once per invoice, before tax; rules do not stack. Minimum quantity and purchase requirements use only qualifying lines. Start and end dates are inclusive and are evaluated against each billing period, including catch-up invoices. Fixed savings are capped at the eligible subtotal and allocated proportionally across lines with exact minor-unit reconciliation. Each generated invoice consumes one use; cancellation does not restore it. Row locks and an invoice redemption constraint protect shared usage limits and retries.
+
+Existing subscriptions and invoices are migrated to line records without recalculating historical prices or totals. Optional local examples can be added with `php artisan db:seed --class=BillingExtensionsSeeder`: an Odoo variant, a support add-on, a quotation template and a disabled volume discount. Enable the sample discount explicitly if you want to use it.
 
 Dashboard and report totals exclude draft and cancelled invoices. Report date filters select invoice billing periods; payments are attributed to those invoices regardless of collection date. Active subscriptions are the current count. Lists are paginated and customer queries are scoped by account.
 
@@ -79,8 +85,8 @@ The default test suite uses isolated in-memory SQLite. The PostgreSQL script use
 
 ## Scope of this first implementation
 
-Included: starter-kit login, registration and password reset; admin/staff/customer authorization; product and plan creation; plan availability and quantity rules; subscription lifecycle; recurring draft invoices and tax snapshots; confirmation, cancellation, queued email and print views; partial payments; scoped portal pages; dashboard and billing-period report filters; scheduler and database queue integration.
+Included: starter-kit login, registration and password reset; admin/staff/customer authorization; products, variants and plans; multi-product subscription and invoice lines; reusable quotation templates; automatic fixed and percentage discounts with eligibility rules and usage limits; customer subscription self-service; recurring draft invoices and immutable price/tax snapshots; confirmation, cancellation, queued itemized email and print views; partial payments; dashboard and billing-period report filters; scheduler and database queues.
 
-Follow-up work from the PDF: product variants and price modifiers, multi-product subscription lines, reusable quotation templates, fixed and percentage discount rules with usage limits, editing and audit history, payment gateway integration, richer report exports, and performance measurement with thousands of records. Product, plan and customer selection lists currently show up to 200 records. The two-second performance target has not been certified.
+Follow-up work: editing and audit history, payment gateway integration, richer report exports, and performance measurement with thousands of records. Product, plan and customer selection lists currently show up to 200 records. The two-second performance target has not been certified.
 
 Authentication views and Fortify actions were adapted from Laravel's official MIT-licensed Livewire starter kit: https://github.com/laravel/livewire-starter-kit.

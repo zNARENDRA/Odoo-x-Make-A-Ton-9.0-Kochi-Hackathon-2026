@@ -10,7 +10,7 @@ class InvoiceController extends Controller
 {
     public function show(Request $request, Invoice $invoice): View
     {
-        $invoice->load('subscription', 'payments')->loadSum('payments', 'amount_cents');
+        $invoice->load('subscription', 'payments', 'lines')->loadSum('payments', 'amount_cents');
         abort_unless($request->user()->isTeamMember() || $invoice->subscription->user_id === $request->user()->id, 404);
 
         return view('invoices.show', compact('invoice'));

@@ -32,6 +32,16 @@
 }
 [data-flux-field]:not(ui-radio, ui-checkbox) { @apply grid gap-2; }
 [data-flux-label] { @apply !mb-0 !leading-tight; }
+@media (prefers-reduced-motion: no-preference) {
+    ::view-transition-old(auth-form) { animation: auth-form-out 150ms ease-in both; }
+    ::view-transition-new(auth-form) { animation: auth-form-in 220ms ease-out both; }
+}
+@keyframes auth-form-out {
+    to { opacity: 0; transform: translateY(-6px); }
+}
+@keyframes auth-form-in {
+    from { opacity: 0; transform: translateY(8px); }
+}
 @media print {
     .no-print { display: none !important; }
     body { background: white !important; }

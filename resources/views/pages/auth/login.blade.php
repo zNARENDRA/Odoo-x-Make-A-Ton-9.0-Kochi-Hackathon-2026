@@ -50,10 +50,10 @@
         </form>
 
         {{-- @chisel-registration --}}
-        <div class="space-x-1 text-sm text-center rtl:space-x-reverse text-zinc-600 dark:text-zinc-400">
-            <span>{{ __('Don\'t have an account?') }}</span>
-            <flux:link :href="route('register')" wire:navigate>{{ __('Sign up') }}</flux:link>
-        </div>
+        <a href="{{ route('register') }}" wire:navigate class="self-center text-center text-sm text-slate-700 dark:text-slate-300">
+            {{ __("Don't have an account?") }}
+            <span class="font-semibold text-blue-700 underline underline-offset-2 dark:text-blue-300">{{ __('Create account') }}</span>
+        </a>
         {{-- @end-chisel-registration --}}
     </div>
 </x-layouts::auth>

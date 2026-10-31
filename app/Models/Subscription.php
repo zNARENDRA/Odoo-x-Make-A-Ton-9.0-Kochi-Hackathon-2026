@@ -15,11 +15,11 @@ class Subscription extends Model
     /** @use HasFactory<SubscriptionFactory> */
     use HasFactory;
 
-    protected $fillable = ['user_id', 'plan_id', 'quantity', 'unit_price_cents', 'status', 'starts_on', 'next_billing_on', 'expires_on', 'payment_terms_days', 'billing_interval', 'tax_basis_points'];
+    protected $fillable = ['user_id', 'plan_id', 'quantity', 'unit_price_cents', 'status', 'starts_on', 'next_billing_on', 'expires_on', 'payment_terms_days', 'billing_interval', 'tax_basis_points', 'quotation_template_id', 'quotation_expires_on'];
 
     protected function casts(): array
     {
-        return ['starts_on' => 'immutable_date', 'next_billing_on' => 'immutable_date', 'expires_on' => 'immutable_date'];
+        return ['starts_on' => 'immutable_date', 'next_billing_on' => 'immutable_date', 'expires_on' => 'immutable_date', 'quotation_expires_on' => 'immutable_date'];
     }
 
     public function user(): BelongsTo
@@ -42,6 +42,11 @@ class Subscription extends Model
     public function invoices(): HasMany
     {
         return $this->hasMany(Invoice::class);
+    }
+
+    public function lines(): HasMany
+    {
+        return $this->hasMany(SubscriptionLine::class)->orderBy('position');
     }
 
     public function number(): string

@@ -1,0 +1,50 @@
+<div class="mt-7 flex flex-col gap-6">
+    @if(session('catalog-success'))<div role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">{{ session('catalog-success') }}</div>@endif
+    @if($errors->any())<div role="alert" class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800"><ul class="list-inside list-disc">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
+
+    <div class="grid items-start gap-6 xl:grid-cols-2">
+        <form wire:submit="saveVariant" class="panel p-6">
+            <p class="eyebrow">PRODUCT OPTIONS</p><h2 class="mt-2 text-lg font-semibold">Variant price modifiers</h2><p class="mt-2 text-sm text-slate-500">Modifiers apply per unit, on top of the plan or product price. A negative modifier reduces the price.</p>
+            <div class="mt-5 flex flex-col gap-4">
+                <div><label for="variant-product" class="label">Product</label><select id="variant-product" class="input" wire:model="variant.product_id" required><option value="">Choose product</option>@foreach($products as $product)<option value="{{ $product->id }}">{{ $product->name }}</option>@endforeach</select></div>
+                <div><label for="variant-name" class="label">Variant name</label><input id="variant-name" class="input" wire:model="variant.name" maxlength="120" placeholder="e.g. Odoo brand" required></div>
+                <div><label for="variant-modifier" class="label">Price modifier ({{ config('billing.currency') }})</label><input id="variant-modifier" class="input" type="number" step="0.01" min="-999999.99" max="999999.99" wire:model="variant.modifier" required></div>
+            </div><button class="btn mt-5" wire:loading.attr="disabled">Create variant</button>
+            <div class="mt-6 max-h-64 overflow-y-auto border-t border-slate-100 pt-4">@foreach($products as $product)@foreach($product->variants as $variant)<div class="flex justify-between gap-4 py-2 text-sm"><span>{{ $product->name }} · {{ $variant->name }}</span><span class="shrink-0 text-slate-500">{{ $variant->price_modifier_cents >= 0 ? '+' : '' }}<x-money :cents="$variant->price_modifier_cents" /></span></div>@endforeach @endforeach</div>
+        </form>
+
+        <form wire:submit="saveDiscount" class="panel p-6">
+            <p class="eyebrow">AUTOMATIC SAVINGS</p><h2 class="mt-2 text-lg font-semibold">Discount rules</h2><p class="mt-2 text-sm text-slate-500">The best eligible rule applies once per invoice, before tax. Minimums apply to qualifying product lines. Dates include both endpoints and use the billing period date.</p>
+            <div class="mt-5 grid gap-4 sm:grid-cols-2">
+                <div class="sm:col-span-2"><label for="discount-name" class="label">Rule name</label><input id="discount-name" class="input" wire:model="discount.name" maxlength="120" required></div>
+                <div><label for="discount-type" class="label">Discount type</label><select id="discount-type" class="input" wire:model.live="discount.type"><option value="percentage">Percentage</option><option value="fixed">Fixed amount</option></select></div>
+                <div><label for="discount-value" class="label">{{ $discount['type'] === 'percentage' ? 'Percentage (%)' : 'Amount ('.config('billing.currency').')' }}</label><input id="discount-value" class="input" wire:model="discount.value" type="number" min="0.01" step="0.01" max="{{ $discount['type'] === 'percentage' ? '100' : '999999.99' }}" required></div>
+                <div><label for="discount-product" class="label">Product scope</label><select id="discount-product" class="input" wire:model="discount.product_id"><option value="">All products</option>@foreach($products as $product)<option value="{{ $product->id }}">{{ $product->name }}</option>@endforeach</select></div>
+                <div><label for="discount-subscription" class="label">Subscription scope</label><select id="discount-subscription" class="input" wire:model="discount.subscription_id"><option value="">All subscriptions</option>@foreach($subscriptions as $subscription)<option value="{{ $subscription->id }}">{{ $subscription->number() }} · {{ $subscription->user->name }}</option>@endforeach</select></div>
+                <div><label for="discount-quantity" class="label">Minimum quantity</label><input id="discount-quantity" class="input" wire:model="discount.minimum_quantity" type="number" min="1" max="500000" required></div>
+                <div><label for="discount-purchase" class="label">Minimum purchase ({{ config('billing.currency') }})</label><input id="discount-purchase" class="input" wire:model="discount.minimum_purchase" type="number" min="0" step="0.01" required></div>
+                <div><label for="discount-from" class="label">Starts on (optional)</label><input id="discount-from" class="input" wire:model="discount.starts_on" type="date"></div>
+                <div><label for="discount-until" class="label">Ends on (optional)</label><input id="discount-until" class="input" wire:model="discount.ends_on" type="date"></div>
+                <div><label for="discount-uses" class="label">Maximum invoices (optional)</label><input id="discount-uses" class="input" wire:model="discount.max_uses" type="number" min="1" placeholder="Unlimited"></div>
+            </div><button class="btn mt-5" wire:loading.attr="disabled">Create discount rule</button>
+        </form>
+    </div>
+
+    <div class="panel overflow-hidden"><div class="p-5"><h2 class="font-semibold">Automatic discount register</h2><p class="mt-1 text-xs text-slate-400">A use is consumed when an invoice is generated. Cancellation does not restore it.</p></div><div class="overflow-x-auto"><table class="data-table"><thead><tr><th>Rule</th><th>Value</th><th>Scope</th><th>Minimums</th><th>Uses</th><th>Dates</th><th>Action</th></tr></thead><tbody>@forelse($discounts as $rule)<tr wire:key="discount-{{ $rule->id }}"><td class="font-medium">{{ $rule->name }}</td><td>@if($rule->type === 'percentage'){{ number_format($rule->value / 100, 2) }}%@else<x-money :cents="$rule->value" />@endif</td><td>{{ $rule->product?->name ?? 'All products' }}<p class="text-xs text-slate-400">{{ $rule->subscription_id ? 'Subscription #'.$rule->subscription_id : 'All subscriptions' }}</p></td><td class="text-xs">{{ $rule->minimum_quantity }} units · <x-money :cents="$rule->minimum_purchase_cents" /></td><td>{{ $rule->uses_count }} / {{ $rule->max_uses ?? 'Unlimited' }}</td><td class="whitespace-nowrap text-xs">{{ $rule->starts_on?->format('d M Y') ?? 'Any time' }} → {{ $rule->ends_on?->format('d M Y') ?? 'No end date' }}</td><td><button type="button" class="link" wire:click="toggleDiscount({{ $rule->id }})">{{ $rule->is_active ? 'Disable' : 'Enable' }}</button></td></tr>@empty<tr><td colspan="7" class="!py-10 text-center text-slate-400">No discount rules yet.</td></tr>@endforelse</tbody></table></div></div>
+
+    <form wire:submit="saveTemplate" class="panel p-6">
+        <p class="eyebrow">REUSABLE OFFERS</p><h2 class="mt-2 text-lg font-semibold">Quotation templates</h2><p class="mt-2 text-sm text-slate-500">Pre-fill a plan, quantities, variants, add-ons and payment terms. Prices are captured from the catalog when the subscription draft is saved.</p>
+        <div class="mt-5 grid gap-4 md:grid-cols-3">
+            <div><label for="template-name" class="label">Template name</label><input id="template-name" class="input" wire:model="template.name" maxlength="120" required></div>
+            <div><label for="template-plan" class="label">Recurring plan</label><select id="template-plan" class="input" wire:model.live="template.plan_id" required><option value="">Choose plan</option>@foreach($plans as $plan)<option value="{{ $plan->id }}">{{ $plan->name }}</option>@endforeach</select></div>
+            @php($selectedPlan = $plans->firstWhere('id', $template['plan_id'] ?? null))
+            <div><label for="template-variant" class="label">Plan product variant</label><select id="template-variant" class="input" wire:model="template.product_variant_id"><option value="">Standard</option>@foreach($selectedPlan?->product?->variants ?? [] as $variant)@if($variant->is_active)<option value="{{ $variant->id }}">{{ $variant->name }} ({{ number_format($variant->price_modifier_cents / 100, 2) }})</option>@endif @endforeach</select></div>
+            <div><label for="template-quantity" class="label">Plan quantity</label><input id="template-quantity" class="input" wire:model="template.quantity" type="number" min="1" max="10000" required></div>
+            <div><label for="template-validity" class="label">Quotation valid for (days)</label><input id="template-validity" class="input" wire:model="template.validity_days" type="number" min="1" max="365" required></div>
+            <div><label for="template-terms" class="label">Payment terms (days)</label><input id="template-terms" class="input" wire:model="template.payment_terms_days" type="number" min="0" max="365" required></div>
+        </div>
+        <x-billing-line-editor :items="$templateItems" :products="$products" model="templateItems" add-action="addTemplateItem" remove-action="removeTemplateItem" />
+        <button class="btn mt-5" wire:loading.attr="disabled">Save quotation template</button>
+    </form>
+    <div class="panel overflow-hidden"><div class="p-5"><h2 class="font-semibold">Saved quotation templates</h2></div><div class="overflow-x-auto"><table class="data-table"><thead><tr><th>Template</th><th>Plan</th><th>Quantity</th><th>Additional lines</th><th>Validity</th><th>Payment terms</th></tr></thead><tbody>@forelse($templates as $template)<tr wire:key="template-{{ $template->id }}"><td class="font-medium">{{ $template->name }}</td><td>{{ $template->plan->name }}</td><td>{{ $template->quantity }}</td><td>{{ $template->lines_count }}</td><td>{{ $template->validity_days }} days</td><td>{{ $template->payment_terms_days }} days</td></tr>@empty<tr><td colspan="6" class="!py-10 text-center text-slate-400">No templates yet. Save a reusable offer above.</td></tr>@endforelse</tbody></table></div></div>
+</div>

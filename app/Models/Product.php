@@ -18,4 +18,9 @@ class Product extends Model
     {
         return $this->hasMany(Plan::class);
     }
+
+    public function variants(): HasMany
+    {
+        return $this->hasMany(ProductVariant::class)->orderBy('name');
+    }
 }

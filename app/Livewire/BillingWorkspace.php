@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Actions\CreateSubscriptionDraft;
 use App\Actions\GenerateRenewalInvoices;
 use App\Actions\RecordPayment;
 use App\Actions\TransitionSubscription;
@@ -10,6 +11,8 @@ use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\Plan;
 use App\Models\Product;
+use App\Models\QuotationTemplate;
+use App\Models\QuotationTemplateLine;
 use App\Models\Subscription;
 use App\Models\User;
 use Illuminate\Contracts\View\View;
@@ -49,6 +52,12 @@ class BillingWorkspace extends Component
     public array $subscription = ['user_id' => '', 'plan_id' => '', 'quantity' => 1, 'starts_on' => '', 'expires_on' => '', 'payment_terms_days' => 14];
 
     public array $person = ['name' => '', 'email' => '', 'password' => '', 'role' => 'customer'];
+
+    public string $templateId = '';
+
+    public string $subscriptionVariantId = '';
+
+    public array $items = [];
 
     public ?int $paymentInvoice = null;
 
@@ -102,6 +111,53 @@ class BillingWorkspace extends Component
         return ['required', 'regex:/^\d{1,6}(\.\d{1,2})?$/'];
     }
 
+    public function updatedTemplateId(): void
+    {
+        Gate::authorize('manage-billing');
+        if ($this->templateId === '') {
+            return;
+        }
+        $template = QuotationTemplate::with('lines')->where('is_active', true)->findOrFail($this->templateId);
+        $this->subscription['plan_id'] = $template->plan_id;
+        $this->subscription['quantity'] = $template->quantity;
+        $this->subscription['payment_terms_days'] = $template->payment_terms_days;
+        $this->subscriptionVariantId = (string) ($template->product_variant_id ?? '');
+        $this->items = $template->lines->map(fn (QuotationTemplateLine $line): array => [
+            'product_id' => $line->product_id, 'product_variant_id' => $line->product_variant_id ?? '', 'quantity' => $line->quantity,
+        ])->all();
+        $this->resetValidation();
+    }
+
+    public function updatedSubscription(mixed $value, ?string $key): void
+    {
+        if ($key === 'plan_id') {
+            $this->reset('templateId', 'subscriptionVariantId');
+        }
+    }
+
+    public function updatedItems(mixed $value, ?string $key): void
+    {
+        if ($key && str_ends_with($key, '.product_id')) {
+            $this->items[(int) explode('.', $key)[0]]['product_variant_id'] = '';
+        }
+    }
+
+    public function addItem(): void
+    {
+        Gate::authorize('manage-billing');
+        if (count($this->items) >= 49) {
+            throw ValidationException::withMessages(['items' => 'A subscription supports up to 49 additional lines.']);
+        }
+        $this->items[] = ['product_id' => '', 'product_variant_id' => '', 'quantity' => 1];
+    }
+
+    public function removeItem(int $index): void
+    {
+        Gate::authorize('manage-billing');
+        unset($this->items[$index]);
+        $this->items = array_values($this->items);
+    }
+
     private function cents(string $amount): int
     {
         $parts = explode('.', $amount);
@@ -127,6 +183,7 @@ class BillingWorkspace extends Component
             'notes' => $this->product['notes'] ?? null,
         ]);
         $this->reset('product');
+        $this->dispatch('catalog-updated');
         session()->flash('success', 'Product created. You can now add a recurring plan.');
     }
 
@@ -148,34 +205,27 @@ class BillingWorkspace extends Component
         $data['available_until'] = ($data['available_until'] ?? null) ?: null;
         Plan::create($data);
         $this->reset('plan');
+        $this->dispatch('catalog-updated');
         session()->flash('success', 'Plan created.');
     }
 
-    public function saveSubscription(): void
+    public function saveSubscription(CreateSubscriptionDraft $createDraft): void
     {
         Gate::authorize('manage-billing');
-        $data = $this->validate([
+        $validated = $this->validate([
+            'templateId' => 'nullable|integer|exists:quotation_templates,id',
+            'subscriptionVariantId' => 'nullable|integer|exists:product_variants,id',
             'subscription.user_id' => ['required', Rule::exists('users', 'id')->where('role', 'customer')],
             'subscription.plan_id' => 'required|exists:plans,id',
             'subscription.quantity' => 'required|integer|min:1|max:10000',
             'subscription.starts_on' => 'required|date_format:Y-m-d',
             'subscription.expires_on' => 'nullable|date_format:Y-m-d|after:subscription.starts_on',
             'subscription.payment_terms_days' => 'required|integer|min:0|max:365',
-        ])['subscription'];
-        $plan = Plan::with('product')->findOrFail($data['plan_id']);
-        if ($data['quantity'] < $plan->minimum_quantity) {
-            throw ValidationException::withMessages(['subscription.quantity' => 'This plan requires at least '.$plan->minimum_quantity.' units.']);
-        }
-        if (($plan->available_from && $data['starts_on'] < $plan->available_from->toDateString())
-            || ($plan->available_until && $data['starts_on'] > $plan->available_until->toDateString())) {
-            throw ValidationException::withMessages(['subscription.starts_on' => 'Choose a date within the plan availability window.']);
-        }
-        Subscription::create([
-            ...$data, 'expires_on' => ($data['expires_on'] ?? null) ?: null, 'status' => 'draft',
-            'unit_price_cents' => $plan->price_cents, 'next_billing_on' => $data['starts_on'],
-            'billing_interval' => $plan->interval, 'tax_basis_points' => $plan->product?->tax_basis_points ?? 0,
         ]);
-        $this->reset('subscription', 'showForm');
+        $createDraft->handle(Auth::user(), $validated['subscription'], $this->items,
+            $this->subscriptionVariantId === '' ? null : (int) $this->subscriptionVariantId,
+            $this->templateId === '' ? null : (int) $this->templateId);
+        $this->reset('subscription', 'showForm', 'items', 'templateId', 'subscriptionVariantId');
         $this->subscription['starts_on'] = today()->toDateString();
         session()->flash('success', 'Draft subscription created. Advance it through quotation and confirmation to activate billing.');
     }
@@ -306,7 +356,7 @@ class BillingWorkspace extends Component
         ]);
         $team = Auth::user()->isTeamMember();
         $invoices = $this->invoiceQuery()->with('subscription.user')->withSum('payments', 'amount_cents');
-        $subscriptions = Subscription::with(['user', 'plan'])
+        $subscriptions = Subscription::with(['user', 'plan', 'lines'])
             ->when(! $team, fn (Builder $query) => $query->where('user_id', Auth::id()));
         $active = (clone $subscriptions)->where('status', 'active')->count();
         $posted = $this->invoiceQuery()->whereIn('status', ['confirmed', 'paid']);
@@ -338,8 +388,9 @@ class BillingWorkspace extends Component
             'team' => $team, 'metrics' => compact('active', 'received', 'outstanding', 'overdue'),
             'invoices' => in_array($this->section, ['dashboard', 'invoices', 'reports'], true) ? $invoices->latest('id')->paginate(10) : null,
             'subscriptions' => $this->section === 'subscriptions' ? $subscriptions->latest('id')->paginate(10) : null,
-            'plans' => in_array($this->section, ['catalog', 'subscriptions'], true) ? Plan::with('product')->orderBy('name')->limit(200)->get() : collect(),
-            'products' => $this->section === 'catalog' ? Product::orderBy('name')->limit(200)->get() : collect(),
+            'plans' => $team && in_array($this->section, ['catalog', 'subscriptions'], true) ? Plan::with('product.variants')->orderBy('name')->limit(200)->get() : collect(),
+            'products' => $team && in_array($this->section, ['catalog', 'subscriptions'], true) ? Product::with('variants')->orderBy('name')->limit(200)->get() : collect(),
+            'templates' => $team && $this->section === 'subscriptions' ? QuotationTemplate::where('is_active', true)->orderBy('name')->limit(200)->get() : collect(),
             'customers' => $team && $this->section === 'subscriptions' ? User::where('role', 'customer')->orderBy('name')->limit(200)->get() : collect(),
             'people' => $this->section === 'customers' ? User::whereIn('role', ['customer', 'staff'])->whereLike('name', '%'.$this->search.'%')->latest('id')->paginate(10) : null,
         ])->layout('layouts.workspace');

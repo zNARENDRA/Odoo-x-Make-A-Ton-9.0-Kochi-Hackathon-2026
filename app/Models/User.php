@@ -15,6 +15,8 @@ use Illuminate\Notifications\Notifiable;
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
+    protected $attributes = ['role' => 'customer'];
+
     public function isTeamMember(): bool
     {
         return in_array($this->role, ['admin', 'staff'], true);
