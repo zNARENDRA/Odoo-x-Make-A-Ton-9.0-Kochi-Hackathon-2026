@@ -1,5 +1,7 @@
 # Brightloop Subscription Management
 
+[Deployed application](https://subscription-management-system.antideploy.app)
+
 A working first implementation using PHP 8.5, Laravel 13, the official Livewire starter kit authentication (Fortify + Flux), Livewire 4, Tailwind CSS 4, Vite and PostgreSQL. Database-backed sessions, cache locks and queues are enabled.
 
 ## Run on this Windows machine
@@ -59,6 +61,8 @@ Dashboard and report totals exclude draft and cancelled invoices. Report date fi
 ## Email and background processing
 
 The default `MAIL_MAILER=log` writes invoice emails and password-reset messages to `storage/logs/laravel.log`. It does not deliver to an inbox. Configure SMTP in `.env` before using real email delivery. Invoice emails are queued with three attempts and a 60-second backoff. Failed jobs can be inspected with `php artisan queue:failed`.
+
+The scheduler also checks billing problems every five minutes, dispatches billing emails every minute, and checks for payment and renewal reminders hourly. Configure reminder timing with `BILLING_PAYMENT_REMINDER_DAYS` and `BILLING_RENEWAL_REMINDER_DAYS`, and the dispatch rate with `BILLING_EMAILS_PER_MINUTE`. The billing operations page lets authorized team members review activity and resolve detected issues.
 
 The payment form records received payments; it does not charge a card or bank account.
 
