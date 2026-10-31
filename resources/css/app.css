@@ -1,0 +1,39 @@
+@import 'tailwindcss';
+@import '../../vendor/livewire/flux/dist/flux.css';
+@source '../views';
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../vendor/livewire/flux/stubs/**/*.blade.php';
+@custom-variant dark (&:where(.dark, .dark *));
+@theme {
+    --font-sans: 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
+    --color-accent: #2563eb;
+    --color-accent-content: #2563eb;
+    --color-accent-foreground: #ffffff;
+}
+@layer base {
+    body { @apply text-slate-800 antialiased; }
+    button, a, select { -webkit-tap-highlight-color: transparent; }
+    button:not(:disabled), summary { cursor: pointer; }
+    button:disabled { @apply opacity-50 cursor-wait; }
+    :focus-visible { @apply outline-2 outline-offset-4 outline-blue-600; }
+}
+@layer components {
+    .panel { @apply rounded-2xl border border-slate-200 bg-white shadow-xs; }
+    .btn { @apply inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-blue-700 transition-colors disabled:opacity-50; }
+    .btn-secondary { @apply inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors; }
+    .input { @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none; }
+    .label { @apply mb-1.5 block text-sm font-medium text-slate-700; }
+    .eyebrow { @apply text-xs font-semibold tracking-widest uppercase text-slate-400; }
+    .link { @apply text-sm font-semibold text-blue-600 hover:text-blue-800; }
+    .data-table { @apply w-full text-left text-sm; }
+    .data-table th { @apply whitespace-nowrap bg-slate-50/80 px-5 py-3 text-xs font-medium uppercase tracking-wide text-slate-500; }
+    .data-table td { @apply border-t border-slate-100 px-5 py-4; }
+    .data-table tbody tr { @apply hover:bg-slate-50/60; }
+}
+[data-flux-field]:not(ui-radio, ui-checkbox) { @apply grid gap-2; }
+[data-flux-label] { @apply !mb-0 !leading-tight; }
+@media print {
+    .no-print { display: none !important; }
+    body { background: white !important; }
+    .print-sheet { border: 0 !important; box-shadow: none !important; margin: 0 !important; max-width: none !important; }
+}
